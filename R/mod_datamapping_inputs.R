@@ -23,11 +23,11 @@ datamapping_inputs_ui <- function(id, setting_name){
 }
 
 #' @param id module ID
-#' @param settings - list of data, tfrmt, mode
+#' @param settings
 #'
 #'
 #' @noRd
-datamapping_inputs_server <- function(id, data, settings_in, reset, mode, multiple, required = TRUE){
+datamapping_inputs_server <- function(id, data, settings_in, reset, multiple, required = TRUE){
 
   moduleServer(
     id,

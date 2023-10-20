@@ -29,8 +29,7 @@ datamapping_ui <- function(id){
 #' @param id module ID
 #' @param settings - list of data, tfrmt, mode
 #'
-#'
-#' @noRd
+#'@noRd
 datamapping_server <- function(id, data, tfrmt_orig, mode){
 
   moduleServer(
@@ -148,7 +147,7 @@ datamapping_server <- function(id, data, tfrmt_orig, mode){
                   label_out$initial_state(),
                   param_out$initial_state(),
                   value_out$initial_state(),
-                  columns_out$initial_state())==TRUE)) {
+                  columns_out$initial_state()))) {
           TRUE
         } else {
           FALSE
