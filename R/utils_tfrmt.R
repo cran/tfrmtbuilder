@@ -26,6 +26,12 @@ prep_tfrmt_app <- function(tf){
     )
   }
 
+  if(is.null(tf$page_plan)){
+    tf$page_plan <- page_plan(
+      max_rows = 60
+    )
+  }
+
   tf
 }
 
@@ -175,6 +181,23 @@ format_big_n_struct <- function(x){
   frmt_struct_str
 }
 
+# format page_structure objects
+format_page_struct <- function(x){
+
+  if (is.null(x)){
+    return(c("<b>Group Values:","Label Values:</b>"))
+  }
+  group_string <- create_format_txt(x$group_val)
+  label_string <- create_format_txt(x$label_val)
+
+  page_struct_str <- c(
+    paste0("<b>Group Values:</b>",group_string),
+    paste0("<b>Label Values:</b>",label_string)
+  )
+
+  page_struct_str
+
+}
 
 # template frmt objects
 dummy_frmt <- function(){
@@ -219,9 +242,16 @@ cols_to_dat <- function(data, tfrmt, mock){
   groups_lowest <- groups %>% last()
   columns <- tfrmt$column %>% map_chr(as_label)
   columns_lowest <- columns %>% last() %>% sym()
+  value <- tfrmt$value %>% as_label
 
   tfrmt$big_n <- NULL
-  col_plan_vars <- attr(getFromNamespace("apply_tfrmt","tfrmt")(data, tfrmt, mock), ".col_plan_vars")
+
+  if (! value %in% names(data)) {
+    data <- data %>% mutate(!!value := "xx")
+  }
+
+  data_wide <- getFromNamespace("pivot_wider_tfrmt", "tfrmt")(data, tfrmt, mock)
+  col_plan_vars <- getFromNamespace("create_col_order", "tfrmt")(names(data_wide), cp = tfrmt$col_plan, columns = tfrmt$column)
 
   allcols <- col_plan_vars %>% map_chr(as_label)
   allcols <- getFromNamespace("split_data_names_to_df","tfrmt")(data_names= c(),

@@ -28,18 +28,16 @@ export_ui <- function(id){
                div(style = "height: 650px;",
                    h3("Table", class = "heading_style",
                       span(class = "btn-export", style = "display: flex; gap: 5px;",
-                        div(downloadButton(ns("tbl_save_html"), label = "HTML", icon = icon("download"))),
-                      div(downloadButton(ns("tbl_save_png"), label = "PNG", icon = icon("download")))),
+                           lapply(c("html","png","rtf","docx","pdf","tex"), function(ext){
+                             mod_export_table_ui(ns(ext), ext=ext)
+                           })
+                      )
                       ),
                    div(style = "height: 550px; overflow-y:auto; ",
-                       shinycssloaders::withSpinner(
-                         color = getOption("spinner.color", default = "#254988"),
-                         type = 4,
-                         gt_output(ns("tbl"))
-                       )
+                       table_inner_ui(ns("tbl_view"))
                    )
                )
-             )
+               )
       )
     )
   )
@@ -50,9 +48,10 @@ export_ui <- function(id){
 #' @param data data for the table
 #' @param tfrmt_app_out final tfrmt for the table
 #' @param mode mock mode w/ no data, w/ data, reporting
+#' @param cur_tab Is this tab currently selected? TRUE/FALSE
 #'
 #' @noRd
-export_server <- function(id, data, tfrmt_app_out, mode){
+export_server <- function(id, data, tfrmt_app_out, mode, cur_tab){
 
   moduleServer(
     id,
@@ -63,24 +62,22 @@ export_server <- function(id, data, tfrmt_app_out, mode){
         tfrmt_app_out() %>% tfrmt_to_json()
       })
 
-      tbl_out <- reactive({
-        req(tfrmt_app_out())
-        mode <- isolate(mode())
+      # trigger the table
+      tbl_auto_refresh <- reactiveVal(0)
+      tbl_needs_refresh<- reactiveVal(FALSE)
 
-        if (mode=="reporting"){
-          tfrmt_app_out() %>% print_to_gt(.data = data())
-
-        } else if (mode=="mock_no_data"){
-          tfrmt_app_out() %>% print_mock_gt()
-
-        } else {
-          tfrmt_app_out() %>% print_mock_gt(.data = data())
+      # when the final tfrmt is changed, indicate refresh is needed
+      observeEvent(tfrmt_app_out(), {
+        tbl_needs_refresh(TRUE)
+      })
+      observeEvent(cur_tab()==TRUE, {
+        if (tbl_needs_refresh()){
+          tbl_auto_refresh(tbl_auto_refresh()+1)
+          tbl_needs_refresh(FALSE)
         }
       })
 
-      output$tbl <- render_gt({
-         tbl_out()
-      })
+      tbl_out <- table_inner_server("tbl_view", data, tfrmt_app_out, mode, tbl_auto_refresh)
 
       output$json_save <- downloadHandler(
           filename = function() {
@@ -91,24 +88,8 @@ export_server <- function(id, data, tfrmt_app_out, mode){
           }
         )
 
-      output$tbl_save_html <- downloadHandler(
-        filename = function() {
-          paste('tfrmt.html', sep='')
-        },
-        content = function(con) {
-          gtobj <- tbl_out()
-          gtsave(gtobj, con)
-        }
-      )
-
-      output$tbl_save_png <- downloadHandler(
-        filename = function() {
-          paste('tfrmt.png', sep='')
-        },
-        content = function(con) {
-          gtobj <- tbl_out()
-          gtsave(gtobj, con)
-        }
-      )
+      lapply(c("html","png","rtf","docx","pdf","tex"), function(ext){
+        mod_export_table_server(ext, tbl=tbl_out, ext=ext)
+      })
     })
 }

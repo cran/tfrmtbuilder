@@ -1,35 +1,46 @@
-# Body plan - top level module
+# Page plan - top level module
 
-# returns body_plan (list of frmt_structures)
+# returns page_plan()
 
-body_plan_ui <- function(id){
+page_plan_ui <- function(id){
 
   ns <- NS(id)
 
   tagList(
-    fluidRow(
-      h3("Format Structures", class = "heading_style",
-         actionButton(ns("reset"), "Reset", icon = icon("undo")), class = "btn-reset"),
-      shinyjs::hidden(
-        p(id = ns("none"),
-          "None supplied.")
-      ),
-      p(id = ns("some"), "Click table entry to edit"),
-      div(
-        id = ns("sortable"),
-        uiOutput(ns("tbl"))
-      ),
-      br(),
-      fluidRow(
-        column(3, div(actionButton(ns("add"), "New", icon = icon("plus")), class = "btn-new")),
-        column(3, offset = 1, div(shinyjs::disabled(actionButton(ns("delete"), "Delete", icon = icon("trash")))), class = "btn-delete")
-      )
+    # fluidRow(
+    h3("Page Plan", class = "heading_style",
+       actionButton(ns("reset"), "Reset", icon = icon("undo")), class = "btn-reset"),
+    h4("Note location"),
+    shinyWidgets::radioGroupButtons(
+      inputId = ns("note_loc"), label = NULL,
+      choices = c("noprint", "preheader", "subtitle", "source_note"),
+      selected = character(0)
     ),
+    h4("Max rows"),
+    prettySwitch(ns("max_set"), "Set", value = FALSE),
+    numericInput(ns("max_rows"), label = NULL, value = 10, min = 1, max = NA, step = 5,
+                 width = "25%") ,
+    h4("Page Structures"),
+    shinyjs::hidden(
+      p(id = ns("none"),
+        "None supplied.")
+    ),
+    p(id = ns("some"), "Click table entry to edit"),
+    div(
+      id = ns("sortable"),
+      uiOutput(ns("tbl"))
+    ),
+    br(),
+    fluidRow(
+      column(3, div(actionButton(ns("add"), "New", icon = icon("plus")), class = "btn-new")),
+      column(3, offset = 1, div(shinyjs::disabled(actionButton(ns("delete"), "Delete", icon = icon("trash")))), class = "btn-delete")
+    ),
+    #  ),
     br(),
     shinyjs::hidden(
       div(id = ns("customize"),
           fluidRow(
-              body_plan_edit_ui(ns("customize_pane"))
+            page_plan_edit_ui(ns("customize_pane"))
           ),
           fluidRow(
             column(3, div(actionButton(ns("save"), "Save", icon = icon("save")), class = "btn-save")),
@@ -38,16 +49,16 @@ body_plan_ui <- function(id){
       )
     )
   )
+
 }
 
 #' @param id module ID
 #' @param data data for the table
 #' @param tfrmt_app tfrmt object
 #' @param mode_load mock mode w/ no data, w/ data, reporting
-
 #'
 #' @noRd
-body_plan_server <- function(id, data, tfrmt_app, mode_load){
+page_plan_server <- function(id, data, tfrmt_app, mode_load){
 
   moduleServer(
     id,
@@ -59,34 +70,69 @@ body_plan_server <- function(id, data, tfrmt_app, mode_load){
 
       data_bp <- reactiveVal(NULL)
 
+      max_rows <- reactiveVal(NULL)
+
       # reset to defaults
       observeEvent(input$reset,{
         req(mode()=="done")
         data_bp(data())
-        struct_list(tfrmt_app()$body_plan)
+        struct_list(tfrmt_app()$page_plan$struct_list)
+
+
+        if (!is.null(tfrmt_app()$page_plan$max_rows)){
+          shinyWidgets::updatePrettyCheckbox(session, "max_set", value = TRUE)
+          updateNumericInput(session, "max_rows", value = tfrmt_app()$page_plan$max_rows)
+        }
+
+        shinyWidgets::updateRadioGroupButtons(session, "note_loc",
+                                              selected = tfrmt_app()$page_plan$note_loc)
       })
 
       # set up the defaults
       observeEvent(tfrmt_app(),{
-        struct_list(tfrmt_app()$body_plan)
+
+        existing_pp <- tfrmt_app()$page_plan$struct_list
+        if (!is_empty(existing_pp)){
+          struct_list(existing_pp)
+        }
+
+        if (!is.null(tfrmt_app()$page_plan$max_rows)){
+          shinyWidgets::updatePrettyCheckbox(session, "max_set", value = TRUE)
+          updateNumericInput(session, "max_rows", value = tfrmt_app()$page_plan$max_rows)
+        }
+
+        selected <- tfrmt_app()$page_plan$note_loc %||% "noprint"
+
+        shinyWidgets::updateRadioGroupButtons(session, "note_loc",
+                                              selected = selected)
       })
       observeEvent(data(),{
         data_bp(data())
       })
 
-      # display the frmt_structures
+      observe({
+        if(input$max_set){
+          shinyjs::enable("max_rows")
+          max_rows(input$max_rows)
+        } else {
+          shinyjs::disable("max_rows")
+          max_rows(NULL)
+        }
+      })
+
+      #  display the page_structures
       output$tbl <- renderUI({
 
         req(length(struct_list())>0)
 
         struct_list_txt <- map(struct_list(),
-                                    ~.x %>% format_frmt_struct() %>% {paste0(., collapse = "<br>")})
+                               ~.x %>% format_page_struct() %>% {paste0(., collapse = "<br>")})
 
         create_struct_list_sortable(ns, struct_list_txt, mode())
 
       })
 
-      # when the list is sorted, reshuffle the frmt_structures
+      # when the list is sorted, reshuffle the page_structures
       observeEvent(input$item_list, {
 
         list_ord <- input$item_list %>% as.numeric()
@@ -132,7 +178,7 @@ body_plan_server <- function(id, data, tfrmt_app, mode_load){
       # add mode - add placeholder frmt structure & clear row selection so it is not passed along
       observeEvent(input$add, {
 
-        # add an empty frmt_structure
+        # add an empty row_grp_structure
         struct_list(c(struct_list(), list(NULL)))
         item_num_active(length(struct_list()))
 
@@ -166,12 +212,10 @@ body_plan_server <- function(id, data, tfrmt_app, mode_load){
         # enable/disable the add, delete buttons
         shinyjs::toggle("customize", condition = (mode() %in% c("add", "edit")))
         shinyjs::toggleState("add", condition = (mode()=="done"))
-        shinyjs::toggleState("delete", condition = (mode()=="add" |
-                                                      (mode()=="edit" & length(struct_list())>1)))
-
+        shinyjs::toggleState("delete", condition = (mode() %in% c("add", "edit")))
         shinyjs::toggleClass(id = "sortable", class = "unclickable", condition = (mode() %in% c("add", "edit")))
 
-        })
+      })
 
 
       # toggle the "no formats" message"
@@ -188,7 +232,7 @@ body_plan_server <- function(id, data, tfrmt_app, mode_load){
         selected()
       })
       # customize server
-      plans <- body_plan_edit_server("customize_pane", data_bp, tfrmt_app, selected2)
+      plans <- page_plan_edit_server("customize_pane", data_bp, tfrmt_app, selected2)
 
 
       # when user presses "save", collect the inputs
@@ -199,7 +243,7 @@ body_plan_server <- function(id, data, tfrmt_app, mode_load){
         # replace the highlighted row
         current_id <- item_num_active()
 
-        # update the list of frmt_structures
+        # update the list of row_grp_structures
         if (!is.null(plans())){
           struct_list_existing[[current_id]] <- plans()
 
@@ -220,9 +264,9 @@ body_plan_server <- function(id, data, tfrmt_app, mode_load){
 
         # remove from list
         if(!is.null(item_num_active())){
-            struct_list(
-              struct_list()[-item_num_active()]
-            )
+          struct_list(
+            struct_list()[-item_num_active()]
+          )
         }
 
         # reset mode
@@ -230,7 +274,7 @@ body_plan_server <- function(id, data, tfrmt_app, mode_load){
       })
 
 
-      # recreate data (mock no data only) when frmt_structure_list is updated following a save, deletion, or reorder
+      # recreate data (mock no data only) when page_structure_list is updated following a save, deletion, or reorder
       observeEvent(struct_list(), {
 
         req(mode()=="done")
@@ -240,7 +284,8 @@ body_plan_server <- function(id, data, tfrmt_app, mode_load){
         if (mode_load()=="mock_no_data"){
 
           new_tfrmt <- tfrmt_app()
-          new_tfrmt$body_plan <- struct_list()
+
+          new_tfrmt$page_plan <- do.call("page_plan", struct_list())
 
           if (length(struct_list())>0){
             new_data <- make_mock_data(new_tfrmt)
@@ -254,17 +299,35 @@ body_plan_server <- function(id, data, tfrmt_app, mode_load){
 
       })
 
+      # set the max rows depending on user preference
+      max_rows <- reactiveVal(NULL)
+      observe({
+        if(input$max_set){
+          max_rows(input$max_rows)
+        } else {
+          max_rows(NULL)
+        }
+      })
+
       # return final struct_list only when in done mode
-      body_plan_out <- eventReactive(struct_list(), {
+      page_plan_out <- reactive({
         req(mode()=="done")
-        do.call(body_plan, struct_list())
+        req(input$note_loc)
+
+        arg_list <- list(note_loc = input$note_loc, max_rows = max_rows())
+        if (!is.null(struct_list())){
+          arg_list <- c(struct_list(), arg_list)
+        }
+
+        do.call("page_plan", arg_list)
       })
 
       # return
       return(
-        body_plan_out
+        page_plan_out
       )
 
 
     })
+
 }
